@@ -1,0 +1,146 @@
+---
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: gateway-api
+---
+kind: Gateway
+apiVersion: gateway.networking.k8s.io/v1beta1
+metadata:
+  namespace: gateway-api
+  name: gke-l7-regional-external-managed
+spec:
+  gatewayClassName: gke-l7-regional-external-managed
+  listeners:
+  - name: http
+    protocol: HTTP
+    port: 80
+    allowedRoutes:
+      kinds:
+      - kind: HTTPRoute
+      namespaces:
+        from: All
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: default
+  labels:
+    app: http-echo-no-custom-header
+  name: http-echo-no-custom-header
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: http-echo-no-custom-header
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: http-echo-no-custom-header
+    spec:
+      containers:
+      - image: mendhak/http-https-echo
+        name: http-echo-no-custom-header
+        ports:
+        - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: default
+  labels:
+    app: http-echo-no-custom-header
+  annotations:
+    cloud.google.com/neg: '{"exposed_ports": {"80":{"name": "http-echo-no-custom-header"}}}'
+  name: http-echo-no-custom-header
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app: http-echo-no-custom-header
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  namespace: default
+  name: http-echo-no-custom-header
+spec:
+  parentRefs:
+  - kind: Gateway
+    name: gke-l7-regional-external-managed
+    namespace: gateway-api
+  hostnames:
+  - http-echo-no-custom-header.example.com
+  rules:
+    - backendRefs:
+      - name: http-echo-no-custom-header
+        namespace: default
+        port: 80
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: default
+  labels:
+    app: http-echo-custom-header
+  name: http-echo-custom-header
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: http-echo-custom-header
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: http-echo-custom-header
+    spec:
+      containers:
+      - image: mendhak/http-https-echo
+        name: http-echo-custom-header
+        ports:
+        - containerPort: 8080
+---
+apiVersion: v1
+kind: Service
+metadata:
+  namespace: default
+  labels:
+    app: http-echo-custom-header
+  annotations:
+    cloud.google.com/neg: '{"exposed_ports": {"80":{"name": "http-echo-custom-header"}}}'
+  name: http-echo-custom-header
+spec:
+  ports:
+  - port: 80
+    protocol: TCP
+    targetPort: 8080
+  selector:
+    app: http-echo-custom-header
+---
+apiVersion: gateway.networking.k8s.io/v1beta1
+kind: HTTPRoute
+metadata:
+  namespace: default
+  name: http-echo-custom-header
+spec:
+  parentRefs:
+  - kind: Gateway
+    name: gke-l7-regional-external-managed
+    namespace: gateway-api
+  hostnames:
+  - http-echo-custom-header.example.com
+  rules:
+    - filters:
+      - type: RequestHeaderModifier
+        requestHeaderModifier:
+          add:
+            - name: x-devops-feature
+              value: "enabled"
+      backendRefs:
+      - name: http-echo-custom-header
+        namespace: default
+        port: 80
